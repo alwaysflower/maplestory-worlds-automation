@@ -488,7 +488,26 @@ class OptimizedMapleBot:
         self.running = True
         self.start_time = time.time()
         logger.info("🚀 開始 MapleStory Worlds 優化自動化")
-        logger.info("按 'q' 鍵暫停/恢復，'Esc' 鍵停止")
+
+        # 註冊全域熱鍵 (不需視窗焦點): q 暫停/恢復, esc 停止
+        self._hotkey_lib = None
+        try:
+            import keyboard
+            self._hotkey_lib = keyboard
+
+            def _toggle_pause():
+                self.paused = not self.paused
+                logger.info(f"{'⏸️ 暫停' if self.paused else '▶️ 恢復'}自動化")
+
+            def _stop():
+                self.running = False
+                logger.info("⏹️ 熱鍵停止自動化")
+
+            keyboard.add_hotkey('q', _toggle_pause)
+            keyboard.add_hotkey('esc', _stop)
+            logger.info("按 'q' 暫停/恢復，'Esc' 停止 (全域熱鍵)")
+        except Exception as e:
+            logger.warning(f"全域熱鍵不可用 ({e})，請用 Ctrl+C 終止")
         
         last_stats_time = time.time()
         
@@ -549,14 +568,10 @@ class OptimizedMapleBot:
                     self._log_statistics()
                     last_stats_time = time.time()
                 
-                # 檢查按鍵
-                key = cv2.waitKey(1) & 0xFF
-                if key == ord('q'):
-                    self.paused = not self.paused
-                    logger.info(f"{'⏸️ 暫停' if self.paused else '▶️ 恢復'}自動化")
-                elif key == 27:  # Esc
-                    break
-                
+                # 若顯示預覽, 需 waitKey 刷新視窗 (暫停/停止已由全域熱鍵處理)
+                if show_preview:
+                    cv2.waitKey(1)
+
                 time.sleep(self.scan_interval)
                 
         except KeyboardInterrupt:
@@ -565,6 +580,11 @@ class OptimizedMapleBot:
             logger.error(f"自動化過程中發生錯誤: {e}")
         finally:
             self.running = False
+            if self._hotkey_lib is not None:
+                try:
+                    self._hotkey_lib.remove_all_hotkeys()
+                except Exception:
+                    pass
             cv2.destroyAllWindows()
             self._log_final_statistics()
             logger.info("✅ 自動化已停止")

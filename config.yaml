@@ -116,7 +116,7 @@ detection_behavior:
   mob:
     action: "attack"     # 只保留攻擊怪物
     log: true
-    max_distance: 1000   # 臨時放大以驗證攻擊 (正式使用建議調回 200~400)
+    max_distance: 150    # 攻擊範圍: 怪物超出此距離不攻擊, 觸發搜尋移動去接近
     attack_delay: 0.5
   npc:
     action: "ignore"     # 只偵測不執行動作
