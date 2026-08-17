@@ -174,6 +174,7 @@ class OptimizedMapleBot:
         self.facing = 1  # 角色目前朝向: 1=右, -1=左
         self.player_center = None  # 最近一次偵測到的角色中心 (x, y)
         self.attack_range_px = self.config.get('detection_behavior.mob.attack_range_px', 150)
+        self.same_layer_px = self.config.get('detection_behavior.mob.same_layer_px', 80)
         self.chase_enable = self.config.get('detection_behavior.mob.chase', True)
         
         # 設定 PyAutoGUI (滑鼠) 與 pydirectinput (鍵盤)
@@ -334,6 +335,12 @@ class OptimizedMapleBot:
         dx = mob_x - ref_x           # >0 怪在右, <0 怪在左
         horiz_dist = abs(dx)
         direction = 1 if dx > 0 else -1
+
+        # 垂直層判斷: 角色與怪物 y 差過大視為異層, 平砍夠不到, 跳過
+        vert_dist = abs(mob_y - ref_y)
+        if vert_dist > self.same_layer_px:
+            logger.info(f"⏭️ 跳過異層怪物 (垂直距離: {vert_dist:.0f}px > {self.same_layer_px})")
+            return False
 
         # 範圍內: 轉身 + 攻擊
         if horiz_dist <= self.attack_range_px:
@@ -568,22 +575,27 @@ class OptimizedMapleBot:
                     continue
                 
                 detections = self.detect_objects(img)
-                
-                # 檢查是否偵測到怪物，更新最後偵測時間
-                mob_detected = any(d.class_name == 'mob' for d in detections)
-                if mob_detected:
+
+                # 執行動作: 遍歷怪物(已按距離排序), 找到第一隻同層可打/可追的就處理
+                # (異層怪物會被 _handle_mob 跳過並回傳 False, 繼續試下一隻)
+                mobs = [d for d in detections if d.class_name == 'mob']
+                acted = False
+                if mobs and not self.paused and self.running:
+                    for mob in mobs:
+                        if self.perform_action(mob):
+                            acted = True
+                            break
+
+                # 只有真正處理到同層怪物才算「偵測到可打的怪」:
+                # 更新計時、結束搜尋。畫面上只有異層怪不算, 才能觸發搜尋去別的平台
+                if acted:
                     self.last_mob_detection_time = time.time()
-                    # 如果正在搜尋中且偵測到怪物，停止搜尋
                     if self.is_searching:
                         self._end_mob_search()
-                
-                # 執行動作: 只處理最近的一個怪物 (已按距離排序), 攻擊或追擊
-                mobs = [d for d in detections if d.class_name == 'mob']
-                if mobs and not self.paused and self.running:
-                    self.perform_action(mobs[0])
-                
-                # 如果沒有偵測到怪物且不在搜尋中，檢查是否需要開始搜尋
-                if not mob_detected and self._should_search_for_mobs():
+
+                # 沒有可處理的同層怪物 (無怪物 或 全部異層) 且不在搜尋中,
+                # 檢查是否需要開始搜尋 (走去別的平台找怪)
+                if not acted and self._should_search_for_mobs():
                     self._start_mob_search()
                 
                 # 如果正在搜尋中，執行搜尋移動
