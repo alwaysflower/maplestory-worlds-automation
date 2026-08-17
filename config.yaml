@@ -46,14 +46,14 @@ window:
 controls:
   pickup_key: "space"       # 撿取物品按鍵 (請確認)
   interact_key: "space"     # 與 NPC 互動按鍵
-  attack_key: "z"           # 攻擊按鍵
+  attack_key: "a"           # 攻擊按鍵
   attack_method: "key"      # 攻擊方式：使用 Z 鍵攻擊
   
   # 移動按鍵
   movement_keys:
     left: "left"           # 向左移動
     right: "right"         # 向右移動
-    jump: "x"              # 跳躍 (X 鍵)
+    jump: "space"          # 跳躍 (空白鍵)
     up: "up"               # 向上 (爬繩/梯子)
     down: "down"           # 向下 (跳下平台)
   
