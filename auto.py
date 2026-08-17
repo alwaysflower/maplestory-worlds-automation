@@ -169,6 +169,12 @@ class OptimizedMapleBot:
         self.original_position = None
         self.search_direction = 1  # 1 for right, -1 for left
         self.search_moves = 0
+
+        # 追擊/朝向相關變數
+        self.facing = 1  # 角色目前朝向: 1=右, -1=左
+        self.player_center = None  # 最近一次偵測到的角色中心 (x, y)
+        self.attack_range_px = self.config.get('detection_behavior.mob.attack_range_px', 150)
+        self.chase_enable = self.config.get('detection_behavior.mob.chase', True)
         
         # 設定 PyAutoGUI (滑鼠) 與 pydirectinput (鍵盤)
         if self.config.get('safety.enable_failsafe', True):
@@ -255,7 +261,13 @@ class OptimizedMapleBot:
             
             # 按優先級和距離排序
             detections = self._prioritize_detections(detections)
-            
+
+            # 記錄角色位置 (取信賴度最高的 character), 作為距離/追擊的參考點
+            chars = [d for d in detections if d.class_name == 'character']
+            if chars:
+                best_char = max(chars, key=lambda d: d.confidence)
+                self.player_center = best_char.center
+
             # 記錄統計
             self.stats['detections'] += len(detections)
             detection_time = time.time() - start_time
@@ -280,52 +292,82 @@ class OptimizedMapleBot:
     def perform_action(self, detection: Detection) -> bool:
         """執行優化的遊戲動作"""
         class_name = detection.class_name
-        abs_x = self.monitor['left'] + detection.center[0]
-        abs_y = self.monitor['top'] + detection.center[1]
-        
-        # 檢查距離限制
-        max_distance = self.config.get(f'detection_behavior.{class_name}.max_distance', 200)
-        if detection.distance_from_center > max_distance:
-            return False
-        
+
         try:
-            action_performed = False
-            
             if class_name == 'mob':
-                # 檢查是否啟用攻擊動作
                 mob_action = self.config.get('detection_behavior.mob.action', 'attack')
                 if mob_action == 'attack':
-                    pyautogui.moveTo(abs_x, abs_y, duration=0.1)
-                    attack_method = self.config.get('controls.attack_method', 'click')
-                    if attack_method == 'key':
-                        attack_key = self.config.get('controls.attack_key', 'z')
-                        pydirectinput.press(attack_key)
-                    else:
-                        pyautogui.click()
-                    logger.info(f"⚔️ 攻擊怪物 (信賴度: {detection.confidence:.2f})")
-                    self.stats['mobs_attacked'] += 1
-                    action_performed = True
-                    time.sleep(self.config.get('detection_behavior.mob.attack_delay', 0.5))
+                    return self._handle_mob(detection)
                 else:
                     logger.info(f"👁️ 偵測到怪物 (信賴度: {detection.confidence:.2f}) - 僅記錄")
-                
+
             elif class_name == 'item':
-                # 只偵測物品，不執行動作
                 logger.info(f"👁️ 偵測到物品 (信賴度: {detection.confidence:.2f}) - 僅記錄")
-                
+
             elif class_name == 'npc':
-                # 只偵測 NPC，不執行動作
                 logger.info(f"👁️ 偵測到 NPC (信賴度: {detection.confidence:.2f}) - 僅記錄")
-            
-            if action_performed:
-                self.stats['actions_performed'] += 1
-                return True
-                
+
         except Exception as e:
             logger.error(f"執行動作失敗: {e}")
-        
+
         return False
-    
+
+    def _turn_to(self, direction: int):
+        """轉身面向目標 (1=右, -1=左), 僅在朝向改變時按方向鍵"""
+        if self.facing == direction:
+            return
+        move_key = self.config.get('controls.movement_keys.right', 'right') if direction > 0 \
+            else self.config.get('controls.movement_keys.left', 'left')
+        pydirectinput.press(move_key)  # 點按一下轉身, 不移動位置
+        self.facing = direction
+
+    def _handle_mob(self, detection: Detection) -> bool:
+        """攻擊/追擊三態: 範圍內攻擊, 範圍外追擊接近"""
+        # 參考點: 優先用偵測到的角色中心, 否則用畫面中心
+        if self.player_center is not None:
+            ref_x, ref_y = self.player_center
+        else:
+            ref_x = self.monitor['width'] // 2
+            ref_y = self.monitor['height'] // 2
+
+        mob_x, mob_y = detection.center
+        dx = mob_x - ref_x           # >0 怪在右, <0 怪在左
+        horiz_dist = abs(dx)
+        direction = 1 if dx > 0 else -1
+
+        # 範圍內: 轉身 + 攻擊
+        if horiz_dist <= self.attack_range_px:
+            self._turn_to(direction)
+            attack_method = self.config.get('controls.attack_method', 'key')
+            if attack_method == 'key':
+                attack_key = self.config.get('controls.attack_key', 'a')
+                pydirectinput.press(attack_key)
+            else:
+                abs_x = self.monitor['left'] + mob_x
+                abs_y = self.monitor['top'] + mob_y
+                pyautogui.moveTo(abs_x, abs_y, duration=0.1)
+                pyautogui.click()
+            logger.info(f"⚔️ 攻擊怪物 (信賴度: {detection.confidence:.2f}, 水平距離: {horiz_dist:.0f}px)")
+            self.stats['mobs_attacked'] += 1
+            self.stats['actions_performed'] += 1
+            time.sleep(self.config.get('detection_behavior.mob.attack_delay', 0.5))
+            return True
+
+        # 範圍外: 若啟用追擊, 朝怪物方向走一步
+        if self.chase_enable:
+            move_key = self.config.get('controls.movement_keys.right', 'right') if direction > 0 \
+                else self.config.get('controls.movement_keys.left', 'left')
+            step = self.config.get('detection_behavior.mob.chase_step_sec', 0.25)
+            pydirectinput.keyDown(move_key)
+            time.sleep(step)
+            pydirectinput.keyUp(move_key)
+            self.facing = direction
+            logger.info(f"🏃 追擊怪物 ({'右' if direction > 0 else '左'}, 水平距離: {horiz_dist:.0f}px)")
+            self.stats['actions_performed'] += 1
+            return True
+
+        return False
+
     def _should_search_for_mobs(self) -> bool:
         """檢查是否應該開始尋找怪物"""
         if not self.config.get('automation.mob_hunting.enable', True):
@@ -535,17 +577,10 @@ class OptimizedMapleBot:
                     if self.is_searching:
                         self._end_mob_search()
                 
-                # 執行動作
-                actions_this_cycle = 0
-                for detection in detections:
-                    if not self.running or self.paused:
-                        break
-                    
-                    if self.perform_action(detection):
-                        actions_this_cycle += 1
-                        if actions_this_cycle >= 3:  # 限制每週期最多執行3個動作
-                            break
-                        time.sleep(self.action_delay)
+                # 執行動作: 只處理最近的一個怪物 (已按距離排序), 攻擊或追擊
+                mobs = [d for d in detections if d.class_name == 'mob']
+                if mobs and not self.paused and self.running:
+                    self.perform_action(mobs[0])
                 
                 # 如果沒有偵測到怪物且不在搜尋中，檢查是否需要開始搜尋
                 if not mob_detected and self._should_search_for_mobs():

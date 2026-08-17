@@ -116,7 +116,10 @@ detection_behavior:
   mob:
     action: "attack"     # 只保留攻擊怪物
     log: true
-    max_distance: 150    # 攻擊範圍: 怪物超出此距離不攻擊, 觸發搜尋移動去接近
+    max_distance: 150    # (舊參數, 目前改用 attack_range_px 判定)
+    attack_range_px: 150 # 角色與怪物水平距離小於此值才攻擊, 否則追擊接近
+    chase: true          # 是否追擊: 怪物超出攻擊範圍時朝其方向移動
+    chase_step_sec: 0.25 # 每次追擊按住方向鍵的秒數
     attack_delay: 0.5
   npc:
     action: "ignore"     # 只偵測不執行動作
