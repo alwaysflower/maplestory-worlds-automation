@@ -651,7 +651,26 @@ class OptimizedMapleBot:
         if img is None:
             logger.error("無法擷取畫面")
             return
-        
+
+        # 診斷: 保存擷取的畫面, 確認截到的是不是遊戲畫面
+        cv2.imwrite('debug_capture.png', img)
+        logger.info(f"🖼️ 已保存擷取畫面到 debug_capture.png (尺寸: {img.shape[1]}x{img.shape[0]})")
+        logger.info(f"   擷取區域: left={self.monitor['left']} top={self.monitor['top']} "
+                    f"width={self.monitor['width']} height={self.monitor['height']}")
+
+        # 診斷: 用極低閾值跑一次原始 YOLO, 區分「沒偵測到」還是「被閾值過濾」
+        raw_results = self.model(img, conf=0.01, verbose=False)
+        raw_count = 0
+        for r in raw_results:
+            if r.boxes is not None:
+                for b in r.boxes:
+                    raw_count += 1
+                    cls_id = int(b.cls[0].cpu().numpy())
+                    conf = float(b.conf[0].cpu().numpy())
+                    logger.info(f"   [原始] {self.model.names[cls_id]} 信賴度={conf:.3f}")
+        logger.info(f"🔬 極低閾值(0.01)下原始偵測數: {raw_count} "
+                    f"(當前閾值 {self.confidence_threshold} 過濾後應更少)")
+
         detections = self.detect_objects(img)
         logger.info(f"📊 偵測結果: 發現 {len(detections)} 個物件")
         
