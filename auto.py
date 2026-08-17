@@ -221,7 +221,9 @@ class OptimizedMapleBot:
         start_time = time.time()
         
         try:
-            results = self.model(img, verbose=False)
+            results = self.model(img, conf=self.confidence_threshold,
+                                  iou=self.config.get('model.iou_threshold', 0.45),
+                                  verbose=False)
             detections = []
             
             # 計算畫面中心點
@@ -744,9 +746,10 @@ def main():
         print("5. 查看配置")
         print("6. 查看統計")
         print("7. 退出")
-        
-        choice = input("\n請選擇功能 (1-7): ").strip()
-        
+        print("8. 偵測遊戲視窗座標")
+
+        choice = input("\n請選擇功能 (1-8): ").strip()
+
         if choice == '1':
             bot.test_detection()
         elif choice == '2':
@@ -759,12 +762,48 @@ def main():
             _show_config(bot.config)
         elif choice == '6':
             bot._log_statistics()
+        elif choice == '8':
+            _detect_game_window(bot)
         elif choice == '7':
             break
         else:
             print("❌ 無效選擇")
     
     print("👋 再見！")
+
+def _detect_game_window(bot):
+    """列出所有視窗並自動匹配遊戲視窗, 輸出精確座標"""
+    try:
+        import pygetwindow as gw
+    except ImportError:
+        logger.error("pygetwindow 未安裝, 請執行: pip install pygetwindow")
+        return
+
+    keywords = ['maplestory', 'maple', '冒險島', '楓之谷', '메이플']
+    logger.info("🪟 掃描所有可見視窗:")
+    matched = []
+    for w in gw.getAllWindows():
+        title = (w.title or '').strip()
+        if not title:
+            continue
+        logger.info(f"   標題='{title}' left={w.left} top={w.top} "
+                    f"width={w.width} height={w.height}")
+        if any(k in title.lower() for k in keywords):
+            matched.append(w)
+
+    if matched:
+        logger.info("🎯 疑似遊戲視窗:")
+        for w in matched:
+            logger.info(f"   ★ '{w.title}' left={w.left} top={w.top} "
+                        f"width={w.width} height={w.height}")
+        w = matched[0]
+        bot.monitor = {'left': w.left, 'top': w.top,
+                       'width': w.width, 'height': w.height}
+        logger.info(f"✅ 已將擷取區域設為: {bot.monitor}")
+        logger.info("   (本次有效; 若要永久生效請更新 config.yaml 的 window.default)")
+    else:
+        logger.info("⚠️ 未自動匹配到遊戲視窗, 請從上方清單找出遊戲標題手動設定")
+
 
 def _adjust_window_settings(bot):
     """調整視窗設定"""

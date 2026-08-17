@@ -14,6 +14,7 @@ numpy>=1.24.0              # 數值計算
 # 系統自動化
 pyautogui>=0.9.54          # GUI 自動化 (滑鼠移動/點擊)
 pydirectinput>=1.0.4       # DirectInput 鍵盤模擬 (scancode，遊戲更易接收)
+pygetwindow>=0.0.9         # 視窗座標偵測
 psutil>=5.9.0              # 系統進程監控
 mss>=9.0.0                 # 高性能螢幕截圖
 
