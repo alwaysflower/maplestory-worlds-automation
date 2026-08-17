@@ -10,10 +10,10 @@ model:
 # 視窗設定
 window:
   default:
-    left: 100
-    top: 100
-    width: 800  # 調整為較小尺寸
-    height: 600
+    left: 19
+    top: 23
+    width: 1728  # 對準「冒险岛怀旧服」視窗
+    height: 1009
   # 預設遊戲視窗位置（可根據不同解析度調整）
   presets:
     small:
@@ -116,7 +116,7 @@ detection_behavior:
   mob:
     action: "attack"     # 只保留攻擊怪物
     log: true
-    max_distance: 200
+    max_distance: 1000   # 臨時放大以驗證攻擊 (正式使用建議調回 200~400)
     attack_delay: 0.5
   npc:
     action: "ignore"     # 只偵測不執行動作

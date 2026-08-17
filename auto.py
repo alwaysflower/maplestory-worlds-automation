@@ -779,7 +779,9 @@ def _detect_game_window(bot):
         logger.error("pygetwindow 未安裝, 請執行: pip install pygetwindow")
         return
 
-    keywords = ['maplestory', 'maple', '冒險島', '楓之谷', '메이플']
+    keywords = ['冒险岛', '冒險島', '怀旧服', '懷舊服', '楓之谷', 'maplestory', 'maple', '메이플']
+    # 排除瀏覽器/編輯器等含關鍵字但非遊戲的視窗
+    exclude = ['chrome', 'edge', 'firefox', 'code', 'powershell', '资源管理器', '資源管理器']
     logger.info("🪟 掃描所有可見視窗:")
     matched = []
     for w in gw.getAllWindows():
@@ -788,7 +790,10 @@ def _detect_game_window(bot):
             continue
         logger.info(f"   標題='{title}' left={w.left} top={w.top} "
                     f"width={w.width} height={w.height}")
-        if any(k in title.lower() for k in keywords):
+        tl = title.lower()
+        if any(e in tl for e in exclude):
+            continue
+        if any(k in tl for k in keywords):
             matched.append(w)
 
     if matched:
