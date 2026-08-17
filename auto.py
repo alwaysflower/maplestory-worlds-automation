@@ -176,7 +176,14 @@ class OptimizedMapleBot:
         self.attack_range_px = self.config.get('detection_behavior.mob.attack_range_px', 150)
         self.same_layer_px = self.config.get('detection_behavior.mob.same_layer_px', 80)
         self.chase_enable = self.config.get('detection_behavior.mob.chase', True)
-        
+        self.chasing_key = None  # 目前持續按住追擊的方向鍵 (None=未在追擊)
+
+        # 撿取物品相關變數
+        self.item_action = self.config.get('detection_behavior.item.action', 'ignore')
+        self.pickup_range_px = self.config.get('detection_behavior.item.pickup_range_px', 60)
+        self.item_same_layer_px = self.config.get('detection_behavior.item.same_layer_px', 80)
+        self.item_approach = self.config.get('detection_behavior.item.approach', True)
+
         # 設定 PyAutoGUI (滑鼠) 與 pydirectinput (鍵盤)
         if self.config.get('safety.enable_failsafe', True):
             pyautogui.FAILSAFE = True
@@ -303,7 +310,10 @@ class OptimizedMapleBot:
                     logger.info(f"👁️ 偵測到怪物 (信賴度: {detection.confidence:.2f}) - 僅記錄")
 
             elif class_name == 'item':
-                logger.info(f"👁️ 偵測到物品 (信賴度: {detection.confidence:.2f}) - 僅記錄")
+                if self.item_action == 'pickup':
+                    return self._handle_item(detection)
+                else:
+                    logger.info(f"👁️ 偵測到物品 (信賴度: {detection.confidence:.2f}) - 僅記錄")
 
             elif class_name == 'npc':
                 logger.info(f"👁️ 偵測到 NPC (信賴度: {detection.confidence:.2f}) - 僅記錄")
@@ -321,6 +331,12 @@ class OptimizedMapleBot:
             else self.config.get('controls.movement_keys.left', 'left')
         pydirectinput.press(move_key)  # 點按一下轉身, 不移動位置
         self.facing = direction
+
+    def _stop_chase(self):
+        """鬆開正在按住的追擊方向鍵 (若有)"""
+        if self.chasing_key is not None:
+            pydirectinput.keyUp(self.chasing_key)
+            self.chasing_key = None
 
     def _handle_mob(self, detection: Detection) -> bool:
         """攻擊/追擊三態: 範圍內攻擊, 範圍外追擊接近"""
@@ -342,8 +358,9 @@ class OptimizedMapleBot:
             logger.info(f"⏭️ 跳過異層怪物 (垂直距離: {vert_dist:.0f}px > {self.same_layer_px})")
             return False
 
-        # 範圍內: 轉身 + 攻擊
+        # 範圍內: 停止追擊(鬆開方向鍵) + 轉身 + 攻擊
         if horiz_dist <= self.attack_range_px:
+            self._stop_chase()
             self._turn_to(direction)
             attack_method = self.config.get('controls.attack_method', 'key')
             if attack_method == 'key':
@@ -360,16 +377,62 @@ class OptimizedMapleBot:
             time.sleep(self.config.get('detection_behavior.mob.attack_delay', 0.5))
             return True
 
-        # 範圍外: 若啟用追擊, 朝怪物方向走一步
+        # 範圍外: 持續按住方向鍵朝怪物移動 (跨幀保持, 不每幀點按, 移動連貫)
         if self.chase_enable:
             move_key = self.config.get('controls.movement_keys.right', 'right') if direction > 0 \
                 else self.config.get('controls.movement_keys.left', 'left')
-            step = self.config.get('detection_behavior.mob.chase_step_sec', 0.25)
-            pydirectinput.keyDown(move_key)
-            time.sleep(step)
-            pydirectinput.keyUp(move_key)
+            # 方向改變(或尚未按住)時, 先鬆開舊鍵再按新方向; 方向不變則維持按住
+            if self.chasing_key != move_key:
+                self._stop_chase()
+                pydirectinput.keyDown(move_key)
+                self.chasing_key = move_key
             self.facing = direction
             logger.info(f"🏃 追擊怪物 ({'右' if direction > 0 else '左'}, 水平距離: {horiz_dist:.0f}px)")
+            self.stats['actions_performed'] += 1
+            return True
+
+        return False
+
+    def _handle_item(self, detection: Detection) -> bool:
+        """撿取物品: 同層且範圍內按撿取鍵, 範圍外走過去接近 (結構同 _handle_mob)"""
+        if self.player_center is not None:
+            ref_x, ref_y = self.player_center
+        else:
+            ref_x = self.monitor['width'] // 2
+            ref_y = self.monitor['height'] // 2
+
+        item_x, item_y = detection.center
+        dx = item_x - ref_x
+        horiz_dist = abs(dx)
+        direction = 1 if dx > 0 else -1
+
+        # 垂直層判斷: 異層物品撿不到, 跳過
+        vert_dist = abs(item_y - ref_y)
+        if vert_dist > self.item_same_layer_px:
+            logger.info(f"⏭️ 跳過異層物品 (垂直距離: {vert_dist:.0f}px > {self.item_same_layer_px})")
+            return False
+
+        # 範圍內: 停止移動 + 按撿取鍵
+        if horiz_dist <= self.pickup_range_px:
+            self._stop_chase()
+            pickup_key = self.config.get('controls.pickup_key', 'z')
+            pydirectinput.press(pickup_key)
+            logger.info(f"💰 撿取物品 (信賴度: {detection.confidence:.2f}, 水平距離: {horiz_dist:.0f}px)")
+            self.stats['items_collected'] += 1
+            self.stats['actions_performed'] += 1
+            time.sleep(self.config.get('detection_behavior.item.pickup_delay', 0.4))
+            return True
+
+        # 範圍外: 持續按住方向鍵走向物品
+        if self.item_approach:
+            move_key = self.config.get('controls.movement_keys.right', 'right') if direction > 0 \
+                else self.config.get('controls.movement_keys.left', 'left')
+            if self.chasing_key != move_key:
+                self._stop_chase()
+                pydirectinput.keyDown(move_key)
+                self.chasing_key = move_key
+            self.facing = direction
+            logger.info(f"🚶 走向物品 ({'右' if direction > 0 else '左'}, 水平距離: {horiz_dist:.0f}px)")
             self.stats['actions_performed'] += 1
             return True
 
@@ -566,6 +629,7 @@ class OptimizedMapleBot:
                     break
                 
                 if self.paused:
+                    self._stop_chase()  # 暫停時鬆開追擊鍵, 避免角色卡住往前走
                     time.sleep(0.1)
                     continue
                 
@@ -593,9 +657,22 @@ class OptimizedMapleBot:
                     if self.is_searching:
                         self._end_mob_search()
 
-                # 沒有可處理的同層怪物 (無怪物 或 全部異層) 且不在搜尋中,
+                # 沒怪可打時, 嘗試撿取同層物品 (走過去按 Z)
+                picked = False
+                if not acted and self.item_action == 'pickup' and not self.paused and self.running:
+                    items = [d for d in detections if d.class_name == 'item']
+                    for item in items:
+                        if self.perform_action(item):
+                            picked = True
+                            break
+
+                # 既沒打到怪也沒撿到物品這一幀, 鬆開可能還按住的方向鍵, 避免角色一直往前走
+                if not acted and not picked:
+                    self._stop_chase()
+
+                # 沒有可處理的同層怪物也沒物品可撿, 且不在搜尋中:
                 # 檢查是否需要開始搜尋 (走去別的平台找怪)
-                if not acted and self._should_search_for_mobs():
+                if not acted and not picked and self._should_search_for_mobs():
                     self._start_mob_search()
                 
                 # 如果正在搜尋中，執行搜尋移動
@@ -627,6 +704,7 @@ class OptimizedMapleBot:
             logger.error(f"自動化過程中發生錯誤: {e}")
         finally:
             self.running = False
+            self._stop_chase()  # 結束時鬆開任何還按住的方向鍵
             if self._hotkey_lib is not None:
                 try:
                     self._hotkey_lib.remove_all_hotkeys()

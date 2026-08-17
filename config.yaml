@@ -44,7 +44,7 @@ window:
 
 # 按鍵設定 (根據您的遊戲配置更新)
 controls:
-  pickup_key: "space"       # 撿取物品按鍵 (請確認)
+  pickup_key: "z"           # 撿取物品按鍵 (踩在物品上按 Z)
   interact_key: "space"     # 與 NPC 互動按鍵
   attack_key: "a"           # 攻擊按鍵
   attack_method: "key"      # 攻擊方式：使用 Z 鍵攻擊
@@ -110,9 +110,13 @@ detection_behavior:
     action: "ignore"
     log: false
   item:
-    action: "ignore"     # 只偵測不執行動作
+    action: "pickup"      # 沒怪時走過去按 Z 撿取
     log: true
     max_distance: 150
+    pickup_range_px: 60   # 角色與物品水平距離小於此值才按撿取鍵, 否則走過去接近
+    same_layer_px: 80     # 垂直距離超過此值視為異層, 撿不到, 跳過
+    approach: true        # 是否走向物品 (超出撿取範圍時朝其方向移動)
+    pickup_delay: 0.4     # 撿取後等待秒數
   mob:
     action: "attack"     # 只保留攻擊怪物
     log: true
