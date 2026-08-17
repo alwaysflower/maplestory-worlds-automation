@@ -3,7 +3,7 @@
 # 模型設定
 model:
   default_path: "weights/best.pt"
-  confidence_threshold: 0.6  # 提高信賴度閾值
+  confidence_threshold: 0.10  # 臨時降低以驗證偵測鏈路 (正式使用需重訓模型)
   iou_threshold: 0.45
   device: "auto"  # auto, cpu, cuda
 
