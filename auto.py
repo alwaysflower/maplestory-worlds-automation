@@ -11,6 +11,7 @@ import cv2
 import mss
 import numpy as np
 import pyautogui
+import pydirectinput
 import time
 import os
 import sys
@@ -168,10 +169,12 @@ class OptimizedMapleBot:
         self.search_direction = 1  # 1 for right, -1 for left
         self.search_moves = 0
         
-        # 設定 PyAutoGUI
+        # 設定 PyAutoGUI (滑鼠) 與 pydirectinput (鍵盤)
         if self.config.get('safety.enable_failsafe', True):
             pyautogui.FAILSAFE = True
         pyautogui.PAUSE = 0.05  # 減少暫停時間提升性能
+        pydirectinput.PAUSE = 0.05
+        pydirectinput.FAILSAFE = False  # 由 pyautogui 負責 failsafe
         
         logger.info("OptimizedMapleBot 初始化完成")
         self._load_model()
@@ -293,7 +296,7 @@ class OptimizedMapleBot:
                     attack_method = self.config.get('controls.attack_method', 'click')
                     if attack_method == 'key':
                         attack_key = self.config.get('controls.attack_key', 'z')
-                        pyautogui.press(attack_key)
+                        pydirectinput.press(attack_key)
                     else:
                         pyautogui.click()
                     logger.info(f"⚔️ 攻擊怪物 (信賴度: {detection.confidence:.2f})")
@@ -381,12 +384,12 @@ class OptimizedMapleBot:
         move_key = self.config.get('controls.movement_keys.right' if self.search_direction > 0 else 'controls.movement_keys.left', 'right' if self.search_direction > 0 else 'left')
         
         # 按住移動鍵一段時間
-        pyautogui.keyDown(move_key)
+        pydirectinput.keyDown(move_key)
         time.sleep(0.3)
-        pyautogui.keyUp(move_key)
-        
+        pydirectinput.keyUp(move_key)
+
         self.search_moves += 1
-        
+
         # 每移動3次改變方向
         if self.search_moves >= 3:
             self.search_direction *= -1
@@ -398,14 +401,14 @@ class OptimizedMapleBot:
         if self.search_moves % 2 == 0:
             # 跳躍
             jump_key = self.config.get('controls.movement_keys.jump', 'x')
-            pyautogui.press(jump_key)
+            pydirectinput.press(jump_key)
             logger.info("⬆️ 跳躍搜尋")
         else:
             # 向下移動
             down_key = self.config.get('controls.movement_keys.down', 'down')
-            pyautogui.keyDown(down_key)
+            pydirectinput.keyDown(down_key)
             time.sleep(0.2)
-            pyautogui.keyUp(down_key)
+            pydirectinput.keyUp(down_key)
             logger.info("⬇️ 向下搜尋")
         
         self.search_moves += 1
@@ -419,13 +422,13 @@ class OptimizedMapleBot:
         
         if chosen_movement == 'jump':
             jump_key = self.config.get('controls.movement_keys.jump', 'x')
-            pyautogui.press(jump_key)
+            pydirectinput.press(jump_key)
             logger.info("🎲 隨機跳躍")
         else:
             move_key = self.config.get(f'controls.movement_keys.{chosen_movement}', chosen_movement)
-            pyautogui.keyDown(move_key)
+            pydirectinput.keyDown(move_key)
             time.sleep(0.3)
-            pyautogui.keyUp(move_key)
+            pydirectinput.keyUp(move_key)
             logger.info(f"🎲 隨機移動: {chosen_movement}")
         
         self.search_moves += 1
@@ -459,9 +462,9 @@ class OptimizedMapleBot:
                 # 如果最後是向左移動，現在向右移動
                 move_key = self.config.get('controls.movement_keys.right', 'right')
             
-            pyautogui.keyDown(move_key)
+            pydirectinput.keyDown(move_key)
             time.sleep(0.5)  # 移動時間稍長一些
-            pyautogui.keyUp(move_key)
+            pydirectinput.keyUp(move_key)
             
         except Exception as e:
             logger.error(f"返回中心失敗: {e}")
