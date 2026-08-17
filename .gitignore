@@ -79,6 +79,11 @@ reports/
 *.pdf
 *.xlsx
 
+# Debug 資料夾例外: 允許提交診斷 log 與截圖以便分享
+!debug/
+!debug/*.log
+!debug/*.png
+
 # System files
 .pytest_cache/
 .coverage

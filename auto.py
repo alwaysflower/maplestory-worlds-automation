@@ -24,12 +24,13 @@ from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
 from ultralytics import YOLO
 
-# 配置日誌
+# 配置日誌 (輸出到 debug/ 資料夾, 方便 push 分享診斷資訊)
+os.makedirs('debug', exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('auto_system.log', encoding='utf-8'),
+        logging.FileHandler('debug/auto_system.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -653,8 +654,8 @@ class OptimizedMapleBot:
             return
 
         # 診斷: 保存擷取的畫面, 確認截到的是不是遊戲畫面
-        cv2.imwrite('debug_capture.png', img)
-        logger.info(f"🖼️ 已保存擷取畫面到 debug_capture.png (尺寸: {img.shape[1]}x{img.shape[0]})")
+        cv2.imwrite('debug/debug_capture.png', img)
+        logger.info(f"🖼️ 已保存擷取畫面到 debug/debug_capture.png (尺寸: {img.shape[1]}x{img.shape[0]})")
         logger.info(f"   擷取區域: left={self.monitor['left']} top={self.monitor['top']} "
                     f"width={self.monitor['width']} height={self.monitor['height']}")
 
